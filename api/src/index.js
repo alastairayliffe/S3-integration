@@ -1,0 +1,62 @@
+import http from 'http';
+import express from 'express';
+import cors from 'cors';
+import morgan from 'morgan';
+import bodyParser from 'body-parser';
+import AppRouter from './router';
+import multer from 'multer';
+import multerS3 from 'multer-s3';
+import path from 'path';
+import {s3Config, s3Region, s3Bucket} from './config';
+
+
+// Amazon S3 setup
+import AWS from 'aws-sdk';
+
+AWS.config.update(s3Config);
+
+AWS.config.region = s3Region;
+const s3 = new AWS.S3();
+
+//const upload = multer({ storage: storageConfig })
+// End file storage config
+
+const upload = multer({
+    storage: multerS3({
+      s3: s3,
+      bucket: s3Bucket,
+      metadata: function (req, file, cb) {
+        cb(null, {fieldName: file.fieldname});
+      },
+      key: function (req, file, cb) {
+          const filename = `${Date.now().toString()}-${file.originalname}`;
+        cb(null, filename)
+      }
+    })
+  });
+
+const PORT = 3000;
+const app = express();
+app.server = http.createServer(app);
+
+app.use(morgan('dev'));
+
+app.use(cors({
+    exposedHeaders: "*"
+}));
+
+app.use(bodyParser.json({
+    limit: '50mb'
+}));
+
+app.set('root', __dirname);
+
+app.upload = upload;
+
+new AppRouter(app);
+
+app.server.listen(process.env.PORT || PORT, () => {
+    console.log(`App is running on port ${app.server.address().port}`);
+});
+
+export default app;
